@@ -24,10 +24,19 @@ dates = sorted(dates)
 #print(dates)
 
 
-stocks = movs.loc[movs.TIPO=="stock"]
-tickers = list(set(stocks.TICKER.to_list()))
+stocks = movs.loc[(movs.GRUPO=="stock") | (movs.GRUPO=="cedear")]
+tickers = list(set(stocks.ACTIVO.to_list()))
 
 prices = yf.download(tickers, group_by="ticker")
+
+grupos = {}
+for i in range(len(movs)):
+    grupo, activo = movs.iloc[i][["GRUPO", "ACTIVO"]]
+    if grupo not in grupos: grupos[grupo] = []
+    if activo not in grupos[grupo]: grupos[grupo].append(activo)
+
+print(grupos)
+
 
 data = {}
 for ticker in tickers:
@@ -46,8 +55,8 @@ precios.loc[:, "ARS"] = 1
 
 
 operaciones = movs.loc[(movs.OPERACION=="compra") | (movs.OPERACION=="venta")]
-operaciones = operaciones.groupby("FECHA")[["TICKER", "OPERACION", "CANTIDAD", "PRECIO"]]\
-    .apply(lambda x: x.set_index('TICKER').to_dict(orient='index'))\
+operaciones = operaciones.groupby("FECHA")[["ACTIVO", "OPERACION", "CANTIDAD", "PRECIO"]]\
+    .apply(lambda x: x.set_index('ACTIVO').to_dict(orient='index'))\
     .to_dict()
 
 
@@ -57,7 +66,7 @@ cantidades.loc[:, :] = 0
 #cantidades["CASH"] = cantidades["CASH"].ffill()
 for i in range(len(movs)):
     datos = movs.iloc[i]
-    fecha, operacion, ticker, cantidad, precio, importe = datos[["FECHA", "OPERACION", "TICKER", "CANTIDAD", "PRECIO", "IMPORTE"]]
+    fecha, operacion, ticker, cantidad, precio, importe = datos[["FECHA", "OPERACION", "ACTIVO", "CANTIDAD", "PRECIO", "IMPORTE"]]
 
     if operacion=="compra":
         cantidades.loc[cantidades.index >= fecha, ticker] += cantidad
@@ -71,9 +80,16 @@ for i in range(len(movs)):
         cantidades.loc[cantidades.index >= fecha, "ARS"] -= importe
 
 importes = cantidades * precios
+
 composicion = importes.div(importes.sum(axis=1), axis=0)
 retornos = precios.pct_change()
 retornos_port = composicion * retornos
+
+
+
+
+
+
 
 cantidades.to_excel("cantidades.xlsx")
 precios.to_excel("precios.xlsx")
