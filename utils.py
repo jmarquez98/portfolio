@@ -2,6 +2,51 @@ import pandas as pd
 import pandas_market_calendars as mcal
 import yfinance as yf
 from datetime import datetime
+import sys
+import pathlib
+path = str(pathlib.Path(__file__).parent.absolute())
+
+
+sys.path.insert(1, path+"/../bonds")
+import funciones.download_functions as df
+
+sys.path.insert(1, path+"/../database")
+from db_connection import db
+import load_info as li
+import store_info as sidb
+
+
+
+
+def get_historical_prices(movements):
+    movs = movements.copy(deep=True)
+    # Obtengo tickers de equities incluyendo cedears
+    stocks = movs.loc[(movs.GRUPO == "stock") | (movs.GRUPO == "cedear")]
+    tickers_stocks = list(set(stocks.ACTIVO.to_list()))
+
+    bonos = movs.loc[(movs.GRUPO == "bono")]
+    tickers_bonos = list(set(bonos.ACTIVO.to_list()))
+
+    force_alt = True
+    collection = db.test_collection
+    data, fallas_t = li.load_function(tickers_stocks+["GGAL", "GGAL.BA"], collection, li.load_price_info,
+                                      li.load_connectionless_info_prices_propio, force_alt=force_alt, cant_t=10,
+                                      ruedas_fallas=None)
+    if not force_alt: li.append_last_value(data_prices)
+    tickers_stocks = [ticker for ticker in tickers_stocks if ticker not in fallas_t]
+
+    bonds_p, fallas_b = df.get_hist_bonos(tickers=tickers_bonos + ["GD30", "GD30D"], use_iol=False)
+    tickers_bonos = [ticker for ticker in tickers_bonos if ticker not in fallas_b]
+
+    data.update(bonds_p)
+    tickers = tickers_stocks + tickers_bonos
+    fallas = fallas_t + fallas_b
+
+    return data, tickers, fallas
+
+
+
+
 
 
 def get_cedears_conversion():
@@ -70,8 +115,9 @@ def get_quantities_df(movements, tickers, dates):
 
 
 
-def get_prices_df(prices, tickers, groups, dates, ccl=None, conversions=None):
+def get_prices_df(prices, tickers, groups, dates, mep=None, ccl=None, conversions=None):
     if ccl is not None: ccl = ccl.copy(deep=True)
+    if mep is not None: mep = mep.copy(deep=True)
     if conversions is not None: conversions = conversions.copy(deep=True)
     precios = pd.DataFrame(index=dates, columns=tickers)
 
@@ -84,6 +130,7 @@ def get_prices_df(prices, tickers, groups, dates, ccl=None, conversions=None):
             factor = conversions.loc[ticker, "RATIO"]
         precios[ticker] = prices[ticker]["Close"] * tc / factor
     precios.loc[:, "ARS"] = 1
+    precios.loc[:, "USD MEP"] = mep
 
     return precios
 

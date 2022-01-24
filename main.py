@@ -2,6 +2,9 @@ import pandas as pd
 import pandas_market_calendars as mcal
 import yfinance as yf
 from datetime import datetime
+import sys
+import pathlib
+path = str(pathlib.Path(__file__).parent.absolute())
 
 import utils as ut
 
@@ -11,9 +14,9 @@ import utils as ut
 
 
 
-
 # Obtengo excel con movimientos de cartera
 movs = pd.read_excel("movimientos.xlsx")
+movs = movs.loc[movs.GRUPO!="fci"]
 
 conversiones = ut.get_cedears_conversion()
 
@@ -28,15 +31,18 @@ dates = sorted(dates)
 
 
 
-# Obtengo tickers de equities incluyendo cedears
-stocks = movs.loc[(movs.GRUPO=="stock") | (movs.GRUPO=="cedear")]
-tickers = list(set(stocks.ACTIVO.to_list()))
 
-# Obtengo precios historicos de equities
-data = yf.download(tickers+["GGAL", "GGAL.BA"], group_by="ticker")
+
+# Obtengo precios historicos de equities y bonos
+data, tickers, fallas_t = ut.get_historical_prices(movements=movs)
+
 
 ccl = data["GGAL.BA"]["Close"] * 10 / data["GGAL"]["Close"]
 ccl.ffill(inplace=True)
+
+mep = data["GD30"]["Close"] / data["GD30D"]["Close"]
+mep.ffill(inplace=True)
+
 
 
 
@@ -46,7 +52,7 @@ grupos = ut.group_stocks(movements=movs)
 
 
 # Obtengo df cuyas filas son fechas de mercado y cada columna corresponde a los precios historicos de cada activo
-precios = ut.get_prices_df(prices=data, tickers=tickers, groups=grupos, dates=dates, ccl=ccl, conversions=conversiones)
+precios = ut.get_prices_df(prices=data, tickers=tickers, groups=grupos, dates=dates, mep=mep, ccl=ccl, conversions=conversiones)
 
 
 operaciones = movs.loc[(movs.OPERACION=="compra") | (movs.OPERACION=="venta")]
@@ -56,7 +62,7 @@ operaciones = operaciones.groupby("FECHA")[["ACTIVO", "OPERACION", "CANTIDAD", "
 
 
 # Obtengo df que contiene para cada fecha la cantidad que se tiene de cada activo
-cantidades = ut.get_quantities_df(movements=movs, dates=dates, tickers=tickers+["ARS"])
+cantidades = ut.get_quantities_df(movements=movs, dates=dates, tickers=tickers+["ARS", "USD MEP"])
 
 # Obtengo df que contiene para cada fecha el importe que se tiene de cada activo (precio * cantidad)
 importes = cantidades * precios
